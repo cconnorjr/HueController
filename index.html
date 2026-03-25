@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hue Controller</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f12;
+      --surface: #1a1a22;
+      --surface2: #22222e;
+      --border: #2e2e3e;
+      --text: #e8e8f0;
+      --text-muted: #7070a0;
+      --accent: #f5a623;
+      --accent-dim: rgba(245, 166, 35, 0.15);
+      --on: #f5a623;
+      --on-glow: rgba(245, 166, 35, 0.35);
+      --off: #3a3a50;
+      --danger: #e05c5c;
+      --green: #4caf7d;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .logo {
+      width: 32px; height: 32px;
+      background: var(--accent); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; box-shadow: 0 0 16px var(--on-glow);
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+    .bridge-info { margin-left: auto; font-size: 12px; color: var(--text-muted); }
+    .bridge-info span { color: var(--accent); }
+
+    /* ── Tab nav ── */
+    #app-nav {
+      display: none;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 28px;
+    }
+    #app-nav.visible { display: flex; }
+    .tab-btn {
+      background: none; border: none; color: var(--text-muted);
+      font-size: 14px; font-weight: 500; padding: 12px 16px;
+      cursor: pointer; border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* ── Main ── */
+    main { flex: 1; padding: 32px 28px; max-width: 960px; margin: 0 auto; width: 100%; }
+
+    /* ── Screens ── */
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* ── Setup / Auth cards ── */
+    .setup-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 32px;
+      max-width: 480px; margin: 60px auto 0;
+    }
+    .setup-card h2 { font-size: 22px; margin-bottom: 8px; }
+    .setup-card p { color: var(--text-muted); font-size: 14px; line-height: 1.6; margin-bottom: 24px; }
+
+    /* ── Form fields ── */
+    .field { margin-bottom: 16px; }
+    .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .field input, .field select {
+      width: 100%; padding: 10px 14px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); color: var(--text); font-size: 14px;
+      outline: none; transition: border-color 0.2s;
+    }
+    .field input:focus, .field select:focus { border-color: var(--accent); }
+    .field input::placeholder { color: var(--text-muted); }
+    .field select option { background: var(--surface2); }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 11px 20px; border-radius: var(--radius-sm);
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      border: none; transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: var(--accent); color: #000; }
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-danger { background: rgba(224,92,92,0.15); color: var(--danger); border: 1px solid rgba(224,92,92,0.3); }
+    .btn-full { width: 100%; }
+    .btn-sm { padding: 7px 14px; font-size: 13px; }
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    /* ── Notices ── */
+    .notice {
+      padding: 12px 16px; border-radius: var(--radius-sm);
+      font-size: 13px; line-height: 1.5; margin-top: 16px;
+    }
+    .notice-info { background: rgba(100,130,255,0.1); border: 1px solid rgba(100,130,255,0.3); color: #a0b4ff; }
+    .notice-warn { background: rgba(245,166,35,0.1); border: 1px solid rgba(245,166,35,0.3); color: #f5c060; }
+    .notice-err  { background: rgba(224,92,92,0.1); border: 1px solid rgba(224,92,92,0.3); color: #e08080; }
+    .notice-ok   { background: rgba(60,180,100,0.1); border: 1px solid rgba(60,180,100,0.3); color: #80d4a0; }
+
+    /* ── Dashboard header ── */
+    .dashboard-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 28px; flex-wrap: wrap; gap: 12px;
+    }
+    .dashboard-header h2 { font-size: 20px; font-weight: 600; }
+    .dashboard-actions { display: flex; gap: 10px; align-items: center; }
+
+    /* ── Lights grid ── */
+    .lights-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 16px;
+    }
+
+    .light-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px;
+      display: flex; flex-direction: column; gap: 14px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      cursor: pointer; user-select: none;
+    }
+    .light-card:hover { border-color: #4a4a60; }
+    .light-card.on { border-color: var(--on); box-shadow: 0 0 0 1px var(--on), 0 4px 20px var(--on-glow); }
+    .light-card.unreachable { opacity: 0.45; cursor: not-allowed; }
+
+    .light-icon {
+      width: 44px; height: 44px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; transition: background 0.3s, box-shadow 0.3s;
+    }
+    .light-card.on  .light-icon { background: var(--accent-dim); box-shadow: 0 0 20px var(--on-glow); }
+    .light-card.off .light-icon { background: var(--off); }
+
+    .light-info { flex: 1; }
+    .light-name { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .light-meta { font-size: 12px; color: var(--text-muted); }
+
+    /* ── Toggle switch ── */
+    .toggle { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-track {
+      position: absolute; inset: 0; border-radius: 99px;
+      background: var(--off); transition: background 0.2s; cursor: pointer;
+    }
+    .toggle-track::after {
+      content: ''; position: absolute;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #fff; top: 3px; left: 3px; transition: transform 0.2s;
+    }
+    .toggle input:checked + .toggle-track { background: var(--on); }
+    .toggle input:checked + .toggle-track::after { transform: translateX(20px); }
+
+    .light-footer { display: flex; align-items: center; justify-content: space-between; }
+    .light-status { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    .light-card.on  .light-status { color: var(--on); }
+    .light-card.off .light-status { color: var(--text-muted); }
+    .light-card.unreachable .light-status { color: var(--danger); }
+
+    /* ── Brightness slider ── */
+    .light-brightness { display: flex; align-items: center; gap: 8px; }
+    .light-brightness input[type=range] {
+      flex: 1; -webkit-appearance: none; appearance: none;
+      height: 4px; border-radius: 2px; outline: none; cursor: pointer;
+      background: linear-gradient(to right, var(--on) 0%, var(--on) var(--pct,50%), var(--off) var(--pct,50%));
+    }
+    .light-brightness input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px;
+      border-radius: 50%; background: #fff; box-shadow: 0 0 4px rgba(0,0,0,0.4);
+    }
+    .bri-label { font-size: 11px; color: var(--text-muted); width: 28px; text-align: right; }
+
+    /* ── Loading / Empty ── */
+    .spinner {
+      width: 20px; height: 20px; border: 2px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 0.7s linear infinite; display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-state {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; padding: 80px 0; gap: 16px; color: var(--text-muted);
+    }
+    .empty-state { text-align: center; padding: 80px 0; color: var(--text-muted); }
+    .empty-state p { margin-top: 8px; font-size: 14px; }
+
+    /* ── Disconnect ── */
+    .disconnect-btn {
+      background: none; border: none; color: var(--text-muted);
+      font-size: 12px; cursor: pointer; padding: 4px 8px; border-radius: var(--radius-sm);
+    }
+    .disconnect-btn:hover { color: var(--danger); background: rgba(224,92,92,0.1); }
+
+    /* ── Automations screen ── */
+    .location-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px;
+      margin-bottom: 24px; display: flex; align-items: center; gap: 16px;
+      flex-wrap: wrap;
+    }
+    .location-card .loc-icon { font-size: 24px; }
+    .location-card .loc-text { flex: 1; }
+    .location-card .loc-text h3 { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+    .location-card .loc-text p { font-size: 12px; color: var(--text-muted); }
+    .location-card .loc-text p span { color: var(--accent); }
+
+    .automations-list { display: flex; flex-direction: column; gap: 12px; }
+
+    .auto-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px;
+      display: flex; flex-direction: column; gap: 12px;
+      transition: border-color 0.2s;
+    }
+    .auto-card.auto-enabled { border-color: rgba(76,175,125,0.4); }
+    .auto-card-header { display: flex; align-items: center; gap: 12px; }
+    .auto-card-header .auto-name { font-size: 15px; font-weight: 600; flex: 1; }
+    .auto-card-body { display: flex; gap: 24px; flex-wrap: wrap; }
+    .auto-meta { display: flex; flex-direction: column; gap: 4px; }
+    .auto-meta-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+    .auto-meta-value { font-size: 13px; color: var(--text); }
+    .auto-card-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    .auto-next { font-size: 12px; color: var(--text-muted); }
+    .auto-next span { color: var(--green); }
+    .auto-actions { display: flex; gap: 8px; }
+
+    /* ── Modal ── */
+    .modal-backdrop {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+      z-index: 100; align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); width: 100%; max-width: 520px;
+      max-height: 90vh; overflow-y: auto;
+      display: flex; flex-direction: column;
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 24px; border-bottom: 1px solid var(--border);
+    }
+    .modal-header h3 { font-size: 17px; font-weight: 600; }
+    .modal-close {
+      background: none; border: none; color: var(--text-muted);
+      font-size: 20px; cursor: pointer; padding: 4px; line-height: 1;
+    }
+    .modal-close:hover { color: var(--text); }
+    .modal-body { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+    .modal-footer {
+      padding: 16px 24px; border-top: 1px solid var(--border);
+      display: flex; gap: 10px; justify-content: flex-end;
+    }
+
+    /* ── Radio / Checkbox groups ── */
+    .radio-group, .checkbox-group { display: flex; flex-direction: column; gap: 8px; }
+    .radio-option, .checkbox-option {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .radio-option:hover, .checkbox-option:hover { border-color: #4a4a60; background: rgba(255,255,255,0.02); }
+    .radio-option input, .checkbox-option input { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; }
+    .radio-option.selected, .checkbox-option.selected { border-color: var(--accent); background: var(--accent-dim); }
+    .radio-label, .checkbox-label { flex: 1; font-size: 14px; }
+    .radio-label small, .checkbox-label small { display: block; font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    .trigger-extra { display: flex; align-items: center; gap: 8px; }
+    .trigger-extra input {
+      padding: 6px 10px; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); color: var(--text); font-size: 13px;
+      outline: none; width: 90px;
+    }
+    .trigger-extra input:focus { border-color: var(--accent); }
+    .trigger-extra span { font-size: 12px; color: var(--text-muted); }
+
+    .section-label {
+      font-size: 12px; font-weight: 700; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: -8px;
+    }
+
+    .lights-picker {
+      display: flex; flex-direction: column; gap: 6px;
+      max-height: 220px; overflow-y: auto;
+    }
+    .lights-picker::-webkit-scrollbar { width: 4px; }
+    .lights-picker::-webkit-scrollbar-track { background: transparent; }
+    .lights-picker::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .badge {
+      display: inline-flex; align-items: center; padding: 2px 8px;
+      border-radius: 99px; font-size: 11px; font-weight: 600;
+    }
+    .badge-on { background: rgba(76,175,125,0.15); color: var(--green); border: 1px solid rgba(76,175,125,0.3); }
+    .badge-off { background: rgba(224,92,92,0.12); color: #e08080; border: 1px solid rgba(224,92,92,0.3); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo">💡</div>
+    <h1>Hue Controller</h1>
+  </div>
+  <div class="bridge-info" id="header-bridge-info"></div>
+</header>
+
+<nav id="app-nav">
+  <button class="tab-btn active" id="tab-lights" onclick="switchTab('lights')">💡 Lights</button>
+  <button class="tab-btn" id="tab-automations" onclick="switchTab('automations')">⏰ Automations</button>
+</nav>
+
+<main>
+
+  <!-- ── SETUP ── -->
+  <div id="screen-setup" class="screen active">
+    <div class="setup-card">
+      <h2>Connect to your Bridge</h2>
+      <p>Enter your Hue Bridge IP address, or click <strong>Discover</strong> to find it automatically on your local network.</p>
+      <div class="field">
+        <label>Bridge IP Address</label>
+        <input type="text" id="bridge-ip" placeholder="192.168.x.x" />
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="discoverBridge()">🔍 Discover</button>
+        <button class="btn btn-primary" onclick="startAuth()">Connect →</button>
+      </div>
+      <div id="setup-notice"></div>
+    </div>
+  </div>
+
+  <!-- ── AUTH ── -->
+  <div id="screen-auth" class="screen">
+    <div class="setup-card">
+      <h2>Press the Bridge Button</h2>
+      <p>Press the large button on top of your Hue Bridge, then click <strong>Link</strong> within 30 seconds to authorize this app.</p>
+      <div class="notice notice-warn">🔘 Press the physical button on your Hue Bridge now, then click Link below.</div>
+      <div style="margin-top:20px;" class="btn-row">
+        <button class="btn btn-secondary" onclick="showSetup()">← Back</button>
+        <button class="btn btn-primary" onclick="linkApp()">Link App</button>
+      </div>
+      <div id="auth-notice"></div>
+    </div>
+  </div>
+
+  <!-- ── LIGHTS ── -->
+  <div id="screen-lights" class="screen">
+    <div class="dashboard-header">
+      <h2>Lights</h2>
+      <div class="dashboard-actions">
+        <button class="btn btn-secondary btn-sm" onclick="allOff()">All Off</button>
+        <button class="btn btn-primary btn-sm" onclick="allOn()">All On</button>
+        <button class="btn btn-secondary btn-sm" onclick="loadLights()">↺ Refresh</button>
+        <button class="disconnect-btn" onclick="disconnect()">Disconnect</button>
+      </div>
+    </div>
+    <div id="lights-container"></div>
+  </div>
+
+  <!-- ── AUTOMATIONS ── -->
+  <div id="screen-automations" class="screen">
+    <div class="dashboard-header">
+      <h2>Automations</h2>
+      <div class="dashboard-actions">
+        <button class="btn btn-primary btn-sm" onclick="openModal()">+ New Automation</button>
+      </div>
+    </div>
+
+    <!-- Location card -->
+    <div class="location-card" id="location-card">
+      <div class="loc-icon">📍</div>
+      <div class="loc-text">
+        <h3>Location for Sunrise/Sunset</h3>
+        <p id="location-status">Not set — required for sunrise/sunset automations.</p>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary btn-sm" onclick="detectLocation()">Use My Location</button>
+        <button class="btn btn-secondary btn-sm" onclick="promptManualLocation()">Enter Manually</button>
+      </div>
+    </div>
+
+    <div id="automations-container">
+      <div class="empty-state">⏰<p>No automations yet. Click <strong>+ New Automation</strong> to create one.</p></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── AUTOMATION MODAL ── -->
+<div class="modal-backdrop" id="auto-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">New Automation</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Name -->
+      <div class="field" style="margin:0;">
+        <label>Name</label>
+        <input type="text" id="auto-name" placeholder="e.g. Evening Lights" />
+      </div>
+
+      <!-- Trigger -->
+      <div>
+        <div class="section-label" style="margin-bottom:10px;">Trigger</div>
+        <div class="radio-group">
+          <label class="radio-option" id="ro-time" onclick="selectTrigger('time')">
+            <input type="radio" name="trigger-type" value="time" />
+            <div class="radio-label">
+              Specific time
+              <small>Fire at an exact time every day</small>
+            </div>
+            <div class="trigger-extra" id="extra-time" style="display:none;" onclick="event.stopPropagation()">
+              <input type="time" id="auto-time" value="18:00" />
+            </div>
+          </label>
+          <label class="radio-option" id="ro-sunrise" onclick="selectTrigger('sunrise')">
+            <input type="radio" name="trigger-type" value="sunrise" />
+            <div class="radio-label">
+              Sunrise
+              <small>Fire relative to sunrise each day</small>
+            </div>
+            <div class="trigger-extra" id="extra-sunrise" style="display:none;" onclick="event.stopPropagation()">
+              <input type="number" id="auto-offset-sunrise" value="0" min="-180" max="180" style="width:70px;" />
+              <span>min offset</span>
+            </div>
+          </label>
+          <label class="radio-option" id="ro-sunset" onclick="selectTrigger('sunset')">
+            <input type="radio" name="trigger-type" value="sunset" />
+            <div class="radio-label">
+              Sunset
+              <small>Fire relative to sunset each day</small>
+            </div>
+            <div class="trigger-extra" id="extra-sunset" style="display:none;" onclick="event.stopPropagation()">
+              <input type="number" id="auto-offset-sunset" value="0" min="-180" max="180" style="width:70px;" />
+              <span>min offset</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Action -->
+      <div>
+        <div class="section-label" style="margin-bottom:10px;">Action</div>
+        <div class="radio-group" style="flex-direction:row;">
+          <label class="radio-option" id="ra-on" style="flex:1;" onclick="selectAction('on')">
+            <input type="radio" name="action-type" value="on" checked />
+            <div class="radio-label">Turn On</div>
+          </label>
+          <label class="radio-option" id="ra-off" style="flex:1;" onclick="selectAction('off')">
+            <input type="radio" name="action-type" value="off" />
+            <div class="radio-label">Turn Off</div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Lights -->
+      <div>
+        <div class="section-label" style="margin-bottom:10px;">Lights</div>
+        <div class="lights-picker" id="modal-lights-picker">
+          <div style="color:var(--text-muted);font-size:13px;">Loading lights…</div>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveAutomation()">Save Automation</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+const CRED_KEY   = 'hue_credentials';
+const AUTO_KEY   = 'hue_automations';
+const LOC_KEY    = 'hue_location';
+
+let state = { ip: null, username: null, lights: {} };
+let automations = [];
+let geoLocation = null; // { lat, lng, label }
+let sunCache    = {};   // 'YYYY-MM-DD' => { sunrise: Date, sunset: Date }
+let editingId   = null; // ID of automation being edited, or null for new
+let schedulerTimer = null;
+
+// ═══════════════════════════════════════════════════════
+// SAFE STORAGE
+// ═══════════════════════════════════════════════════════
+function storageSave(key, value) { try { localStorage.setItem(key, value); } catch {} }
+function storageLoad(key)        { try { return localStorage.getItem(key); } catch { return null; } }
+function storageClear(key)       { try { localStorage.removeItem(key); } catch {} }
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  // Load saved credentials
+  const saved = storageLoad(CRED_KEY);
+  if (saved) {
+    try {
+      const creds = JSON.parse(saved);
+      state.ip = creds.ip;
+      state.username = creds.username;
+      document.getElementById('bridge-ip').value = creds.ip;
+      updateHeaderInfo();
+      showConnectedUI();
+      loadLights();
+    } catch {
+      showScreen('setup');
+    }
+  }
+
+  // Load location
+  const savedLoc = storageLoad(LOC_KEY);
+  if (savedLoc) {
+    try { geoLocation = JSON.parse(savedLoc); } catch {}
+  }
+
+  // Load automations
+  const savedAuto = storageLoad(AUTO_KEY);
+  if (savedAuto) {
+    try { automations = JSON.parse(savedAuto); } catch {}
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(`screen-${name}`).classList.add('active');
+}
+
+function showConnectedUI() {
+  document.getElementById('app-nav').classList.add('visible');
+  showScreen('lights');
+  updateTabActive('lights');
+}
+
+function switchTab(tab) {
+  updateTabActive(tab);
+  if (tab === 'lights') {
+    showScreen('lights');
+  } else {
+    showScreen('automations');
+    updateLocationCard();
+    renderAutomations();
+  }
+}
+
+function updateTabActive(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`tab-${tab}`)?.classList.add('active');
+}
+
+function showSetup() {
+  document.getElementById('app-nav').classList.remove('visible');
+  showScreen('setup');
+}
+
+// ═══════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════
+function setNotice(id, msg, type = 'info') {
+  const el = document.getElementById(id);
+  if (!msg) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="notice notice-${type}">${msg}</div>`;
+}
+
+function apiBase() { return `http://${state.ip}/api`; }
+
+function updateHeaderInfo() {
+  const el = document.getElementById('header-bridge-info');
+  el.innerHTML = state.ip ? `Bridge: <span>${state.ip}</span>` : '';
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+}
+
+// ═══════════════════════════════════════════════════════
+// BRIDGE DISCOVERY
+// ═══════════════════════════════════════════════════════
+async function discoverBridge() {
+  setNotice('setup-notice', '🔍 Searching for bridges…', 'info');
+  try {
+    const res = await fetch('https://discovery.meethue.com/');
+    const data = await res.json();
+    if (data && data.length > 0) {
+      const ip = data[0].internalipaddress;
+      document.getElementById('bridge-ip').value = ip;
+      setNotice('setup-notice', `✅ Found bridge at <strong>${ip}</strong>. Click Connect to continue.`, 'ok');
+    } else {
+      setNotice('setup-notice', 'No bridges found automatically. Enter the IP manually.', 'warn');
+    }
+  } catch {
+    setNotice('setup-notice', 'Discovery failed. Enter the bridge IP manually (Hue app → Settings → My Hue system).', 'err');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════════════════
+function startAuth() {
+  const ip = document.getElementById('bridge-ip').value.trim();
+  if (!ip) { setNotice('setup-notice', 'Please enter or discover your bridge IP address.', 'warn'); return; }
+  state.ip = ip;
+  setNotice('auth-notice', '');
+  showScreen('auth');
+}
+
+async function linkApp() {
+  setNotice('auth-notice', '<span class="spinner"></span> Linking…', 'info');
+  try {
+    const res = await fetch(apiBase(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ devicetype: 'hue_web_controller#browser' })
+    });
+    const data = await res.json();
+
+    if (data[0]?.success?.username) {
+      state.username = data[0].success.username;
+      storageSave(CRED_KEY, JSON.stringify({ ip: state.ip, username: state.username }));
+      updateHeaderInfo();
+      setNotice('auth-notice', '');
+      showConnectedUI();
+      loadLights().then(() => initScheduler());
+    } else if (data[0]?.error?.type === 101) {
+      setNotice('auth-notice', '⚠️ Bridge button not pressed (or timed out). Press the button then try again within 30 seconds.', 'warn');
+    } else {
+      setNotice('auth-notice', `Error: ${JSON.stringify(data[0]?.error?.description || data)}`, 'err');
+    }
+  } catch (e) {
+    setNotice('auth-notice', `Connection failed: ${e.message}. Make sure you're on the same network as the bridge.`, 'err');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// LIGHTS
+// ═══════════════════════════════════════════════════════
+async function loadLights() {
+  const container = document.getElementById('lights-container');
+  container.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>Loading lights…</span></div>`;
+
+  try {
+    const res  = await fetch(`${apiBase()}/${state.username}/lights`);
+    const data = await res.json();
+
+    if (Array.isArray(data) && data[0]?.error?.type === 1) {
+      container.innerHTML = `<div class="empty-state">⚠️ Unauthorized. <button class="btn btn-primary btn-sm" onclick="disconnect()">Reconnect</button></div>`;
+      return;
+    }
+
+    state.lights = data;
+    renderLights(data);
+    initScheduler();
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state">Failed to load lights: ${e.message}</div>`;
+  }
+}
+
+function renderLights(lights) {
+  const container = document.getElementById('lights-container');
+  const ids = Object.keys(lights);
+
+  if (ids.length === 0) {
+    container.innerHTML = `<div class="empty-state">💡<p>No lights found on this bridge.</p></div>`;
+    return;
+  }
+
+  container.innerHTML = `<div class="lights-grid">${ids.map(id => lightCardHTML(id, lights[id])).join('')}</div>`;
+
+  ids.forEach(id => {
+    const slider = document.getElementById(`bri-${id}`);
+    if (!slider) return;
+    slider.addEventListener('input', e => {
+      const pct = Math.round((e.target.value / 254) * 100);
+      document.getElementById(`bri-label-${id}`).textContent = `${pct}%`;
+      slider.style.setProperty('--pct', `${pct}%`);
+    });
+    slider.addEventListener('change', e => setBrightness(id, parseInt(e.target.value)));
+  });
+}
+
+function lightCardHTML(id, light) {
+  const on       = light.state.on;
+  const reachable = light.state.reachable !== false;
+  const bri      = light.state.bri || 254;
+  const briPct   = Math.round((bri / 254) * 100);
+  const statusLabel = !reachable ? 'Unreachable' : (on ? 'On' : 'Off');
+  const cardClass   = !reachable ? 'unreachable' : (on ? 'on' : 'off');
+  const emoji    = lightEmoji(light.type);
+  const colorTemp = light.state.ct ? `${Math.round(1000000 / light.state.ct)}K` : '';
+  const meta     = [light.type, colorTemp].filter(Boolean).join(' · ');
+
+  return `
+  <div class="light-card ${cardClass}" id="card-${id}" onclick="toggleLight('${id}')">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div class="light-icon">${emoji}</div>
+      <div class="light-info">
+        <div class="light-name">${escHtml(light.name)}</div>
+        <div class="light-meta">${escHtml(meta)}</div>
+      </div>
+    </div>
+    ${light.state.bri !== undefined ? `
+    <div class="light-brightness" onclick="event.stopPropagation()">
+      <input type="range" id="bri-${id}" min="1" max="254" value="${bri}"
+        style="--pct:${briPct}%" ${!reachable || !on ? 'disabled' : ''} />
+      <span class="bri-label" id="bri-label-${id}">${briPct}%</span>
+    </div>` : ''}
+    <div class="light-footer">
+      <span class="light-status">${statusLabel}</span>
+      <label class="toggle" onclick="event.stopPropagation()">
+        <input type="checkbox" id="toggle-${id}" ${on ? 'checked' : ''} ${!reachable ? 'disabled' : ''}
+          onchange="toggleLight('${id}')" />
+        <span class="toggle-track"></span>
+      </label>
+    </div>
+  </div>`;
+}
+
+function lightEmoji(type = '') {
+  const t = type.toLowerCase();
+  if (t.includes('strip') || t.includes('gradient')) return '🌈';
+  if (t.includes('spot') || t.includes('bloom'))    return '🔦';
+  if (t.includes('candle'))                          return '🕯️';
+  return '💡';
+}
+
+async function toggleLight(id) {
+  const light = state.lights[id];
+  if (!light || light.state.reachable === false) return;
+  const newOn = !light.state.on;
+  state.lights[id].state.on = newOn;
+  updateCardState(id, state.lights[id]);
+  try {
+    await setLightState(id, { on: newOn });
+  } catch {
+    state.lights[id].state.on = !newOn;
+    updateCardState(id, state.lights[id]);
+  }
+}
+
+async function setBrightness(id, bri) {
+  state.lights[id].state.bri = bri;
+  await setLightState(id, { bri });
+}
+
+async function setLightState(id, body) {
+  const res = await fetch(`${apiBase()}/${state.username}/lights/${id}/state`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  return res.json();
+}
+
+function updateCardState(id, light) {
+  const card   = document.getElementById(`card-${id}`);
+  const toggle = document.getElementById(`toggle-${id}`);
+  const slider = document.getElementById(`bri-${id}`);
+  if (!card) return;
+  const on = light.state.on;
+  const reachable = light.state.reachable !== false;
+  card.className = `light-card ${!reachable ? 'unreachable' : (on ? 'on' : 'off')}`;
+  if (toggle) toggle.checked = on;
+  if (slider) slider.disabled = !on || !reachable;
+  const statusEl = card.querySelector('.light-status');
+  if (statusEl) statusEl.textContent = !reachable ? 'Unreachable' : (on ? 'On' : 'Off');
+}
+
+async function allOn()  { await setAllLights(true);  }
+async function allOff() { await setAllLights(false); }
+
+async function setAllLights(on) {
+  const ids = Object.keys(state.lights).filter(id => state.lights[id].state.reachable !== false);
+  await Promise.all(ids.map(id => {
+    state.lights[id].state.on = on;
+    updateCardState(id, state.lights[id]);
+    return setLightState(id, { on });
+  }));
+}
+
+function disconnect() {
+  storageClear(CRED_KEY);
+  if (schedulerTimer) clearInterval(schedulerTimer);
+  state = { ip: null, username: null, lights: {} };
+  document.getElementById('header-bridge-info').innerHTML = '';
+  document.getElementById('app-nav').classList.remove('visible');
+  showScreen('setup');
+}
+
+// ═══════════════════════════════════════════════════════
+// LOCATION
+// ═══════════════════════════════════════════════════════
+function updateLocationCard() {
+  const el = document.getElementById('location-status');
+  if (geoLocation) {
+    el.innerHTML = `<span>${geoLocation.label}</span>`;
+  } else {
+    el.textContent = 'Not set — required for sunrise/sunset automations.';
+  }
+}
+
+async function detectLocation() {
+  const el = document.getElementById('location-status');
+  el.textContent = 'Detecting…';
+  if (!navigator.geolocation) {
+    el.textContent = 'Geolocation not supported. Enter manually.';
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      geoLocation = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        label: `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`
+      };
+      storageSave(LOC_KEY, JSON.stringify(geoLocation));
+      sunCache = {}; // invalidate cache
+      updateLocationCard();
+      recalculateAllNextRuns();
+    },
+    err => {
+      el.textContent = `Could not detect: ${err.message}. Enter manually.`;
+    }
+  );
+}
+
+function promptManualLocation() {
+  const lat = prompt('Enter latitude (e.g. 42.3601):');
+  if (lat === null) return;
+  const lng = prompt('Enter longitude (e.g. -71.0589):');
+  if (lng === null) return;
+  const parsedLat = parseFloat(lat);
+  const parsedLng = parseFloat(lng);
+  if (isNaN(parsedLat) || isNaN(parsedLng)) { alert('Invalid coordinates.'); return; }
+  geoLocation = { lat: parsedLat, lng: parsedLng, label: `${parsedLat.toFixed(4)}, ${parsedLng.toFixed(4)}` };
+  storageSave(LOC_KEY, JSON.stringify(geoLocation));
+  sunCache = {};
+  updateLocationCard();
+  recalculateAllNextRuns();
+}
+
+// ═══════════════════════════════════════════════════════
+// SUNRISE / SUNSET
+// ═══════════════════════════════════════════════════════
+async function fetchSunTimes(date) {
+  const dateStr = date.toISOString().slice(0, 10);
+  if (sunCache[dateStr]) return sunCache[dateStr];
+
+  if (!geoLocation) throw new Error('No location set');
+
+  const url = `https://api.sunrise-sunset.org/json?lat=${geoLocation.lat}&lng=${geoLocation.lng}&date=${dateStr}&formatted=0`;
+  const res  = await fetch(url);
+  const data = await res.json();
+
+  if (data.status !== 'OK') throw new Error('Sunrise API error');
+
+  const result = {
+    sunrise: new Date(data.results.sunrise),
+    sunset:  new Date(data.results.sunset)
+  };
+  sunCache[dateStr] = result;
+  return result;
+}
+
+// ═══════════════════════════════════════════════════════
+// AUTOMATIONS — CRUD
+// ═══════════════════════════════════════════════════════
+function saveAutomationsToStorage() {
+  storageSave(AUTO_KEY, JSON.stringify(automations));
+}
+
+async function recalculateNextRun(auto) {
+  const now = new Date();
+
+  if (auto.trigger.type === 'time') {
+    const [h, m] = auto.trigger.time.split(':').map(Number);
+    const candidate = new Date(now);
+    candidate.setHours(h, m, 0, 0);
+    if (candidate <= now) candidate.setDate(candidate.getDate() + 1);
+    auto.nextRun = candidate.toISOString();
+    return;
+  }
+
+  // sunrise / sunset
+  if (!geoLocation) { auto.nextRun = null; return; }
+
+  try {
+    const key = auto.trigger.type; // 'sunrise' or 'sunset'
+    const offset = (auto.trigger.offset || 0) * 60000; // ms
+
+    let times = await fetchSunTimes(now);
+    let candidate = new Date(times[key].getTime() + offset);
+
+    if (candidate <= now) {
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      times = await fetchSunTimes(tomorrow);
+      candidate = new Date(times[key].getTime() + offset);
+    }
+
+    auto.nextRun = candidate.toISOString();
+  } catch {
+    auto.nextRun = null;
+  }
+}
+
+async function recalculateAllNextRuns() {
+  for (const auto of automations) {
+    if (auto.enabled) await recalculateNextRun(auto);
+  }
+  saveAutomationsToStorage();
+  renderAutomations();
+}
+
+// ═══════════════════════════════════════════════════════
+// SCHEDULER
+// ═══════════════════════════════════════════════════════
+async function initScheduler() {
+  if (schedulerTimer) clearInterval(schedulerTimer);
+  // Recalculate all on init
+  await recalculateAllNextRuns();
+  // Tick every 30 seconds
+  schedulerTimer = setInterval(schedulerTick, 30000);
+}
+
+async function schedulerTick() {
+  const now = new Date();
+  let changed = false;
+
+  for (const auto of automations) {
+    if (!auto.enabled || !auto.nextRun) continue;
+    const nextRun = new Date(auto.nextRun);
+    const msSince = now - nextRun;
+
+    // Fire if 0–2 minutes past scheduled time (prevents misfires on page reload)
+    if (msSince >= 0 && msSince < 2 * 60 * 1000) {
+      await fireAutomation(auto);
+      auto.lastRun = now.toISOString();
+      await recalculateNextRun(auto);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    saveAutomationsToStorage();
+    renderAutomations();
+  }
+}
+
+async function fireAutomation(auto) {
+  const on = auto.action === 'on';
+  const validIds = auto.lightIds.filter(id => state.lights[id]);
+  await Promise.all(validIds.map(id => setLightState(id, { on })));
+  // Update light state in memory
+  validIds.forEach(id => {
+    if (state.lights[id]) {
+      state.lights[id].state.on = on;
+      updateCardState(id, state.lights[id]);
+    }
+  });
+  console.log(`[Automation] "${auto.name}" fired: lights ${validIds.join(',')} → ${on ? 'on' : 'off'}`);
+}
+
+// ═══════════════════════════════════════════════════════
+// AUTOMATIONS — RENDER
+// ═══════════════════════════════════════════════════════
+function renderAutomations() {
+  const container = document.getElementById('automations-container');
+
+  if (automations.length === 0) {
+    container.innerHTML = `<div class="empty-state">⏰<p>No automations yet. Click <strong>+ New Automation</strong> to create one.</p></div>`;
+    return;
+  }
+
+  container.innerHTML = `<div class="automations-list">${automations.map(autoCardHTML).join('')}</div>`;
+}
+
+function autoCardHTML(auto) {
+  const triggerDesc = describeTrigger(auto);
+  const actionBadge = auto.action === 'on'
+    ? `<span class="badge badge-on">Turn On</span>`
+    : `<span class="badge badge-off">Turn Off</span>`;
+
+  const lightNames = auto.lightIds
+    .map(id => state.lights[id]?.name || `Light ${id}`)
+    .join(', ') || 'No lights';
+
+  const nextRunStr = formatNextRun(auto);
+  const enabledClass = auto.enabled ? 'auto-enabled' : '';
+
+  return `
+  <div class="auto-card ${enabledClass}" id="auto-card-${auto.id}">
+    <div class="auto-card-header">
+      <span class="auto-name">${escHtml(auto.name)}</span>
+      ${actionBadge}
+      <label class="toggle" onclick="event.stopPropagation(); toggleAuto('${auto.id}', this)">
+        <input type="checkbox" ${auto.enabled ? 'checked' : ''} />
+        <span class="toggle-track"></span>
+      </label>
+    </div>
+    <div class="auto-card-body">
+      <div class="auto-meta">
+        <span class="auto-meta-label">Trigger</span>
+        <span class="auto-meta-value">${escHtml(triggerDesc)}</span>
+      </div>
+      <div class="auto-meta">
+        <span class="auto-meta-label">Lights</span>
+        <span class="auto-meta-value">${escHtml(lightNames)}</span>
+      </div>
+    </div>
+    <div class="auto-card-footer">
+      <span class="auto-next">${nextRunStr}</span>
+      <div class="auto-actions">
+        <button class="btn btn-secondary btn-sm" onclick="editAutomation('${auto.id}')">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteAutomation('${auto.id}')">Delete</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function describeTrigger(auto) {
+  const t = auto.trigger;
+  if (t.type === 'time') {
+    return `Daily at ${formatTime12(t.time)}`;
+  }
+  const label = t.type === 'sunrise' ? 'Sunrise' : 'Sunset';
+  const offset = t.offset || 0;
+  if (offset === 0) return label;
+  return `${offset > 0 ? offset + ' min after' : Math.abs(offset) + ' min before'} ${label}`;
+}
+
+function formatNextRun(auto) {
+  if (!auto.enabled) return 'Disabled';
+  if (!auto.nextRun)  return '<span>Next: unknown (set location)</span>';
+  const d = new Date(auto.nextRun);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const tmrw = new Date(now); tmrw.setDate(now.getDate() + 1);
+  const isTomorrow = d.toDateString() === tmrw.toDateString();
+  const day = isToday ? 'today' : isTomorrow ? 'tomorrow' : d.toLocaleDateString();
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return `Next: <span>${day} at ${time}</span>`;
+}
+
+function formatTime12(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12  = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
+}
+
+async function toggleAuto(id, labelEl) {
+  const auto = automations.find(a => a.id === id);
+  if (!auto) return;
+  auto.enabled = labelEl.querySelector('input').checked;
+  if (auto.enabled) {
+    await recalculateNextRun(auto);
+  } else {
+    auto.nextRun = null;
+  }
+  saveAutomationsToStorage();
+  renderAutomations();
+}
+
+function deleteAutomation(id) {
+  if (!confirm('Delete this automation?')) return;
+  automations = automations.filter(a => a.id !== id);
+  saveAutomationsToStorage();
+  renderAutomations();
+}
+
+// ═══════════════════════════════════════════════════════
+// MODAL
+// ═══════════════════════════════════════════════════════
+let currentTrigger = 'time';
+let currentAction  = 'on';
+
+function openModal(id = null) {
+  editingId = id;
+  document.getElementById('modal-title').textContent = id ? 'Edit Automation' : 'New Automation';
+
+  // Reset form
+  document.getElementById('auto-name').value = '';
+  selectTrigger('time');
+  selectAction('on');
+  document.getElementById('auto-time').value = '18:00';
+  document.getElementById('auto-offset-sunrise').value = '0';
+  document.getElementById('auto-offset-sunset').value  = '0';
+
+  if (id) {
+    const auto = automations.find(a => a.id === id);
+    if (auto) {
+      document.getElementById('auto-name').value = auto.name;
+      selectTrigger(auto.trigger.type);
+      selectAction(auto.action);
+      if (auto.trigger.type === 'time')    document.getElementById('auto-time').value = auto.trigger.time;
+      if (auto.trigger.type === 'sunrise') document.getElementById('auto-offset-sunrise').value = auto.trigger.offset || 0;
+      if (auto.trigger.type === 'sunset')  document.getElementById('auto-offset-sunset').value  = auto.trigger.offset || 0;
+      // Light selections restored after picker renders
+      setTimeout(() => restoreModalLightSelection(auto.lightIds), 0);
+    }
+  }
+
+  populateModalLights(id ? automations.find(a => a.id === id)?.lightIds : []);
+  document.getElementById('auto-modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('auto-modal').classList.remove('open');
+  editingId = null;
+}
+
+function selectTrigger(type) {
+  currentTrigger = type;
+  ['time','sunrise','sunset'].forEach(t => {
+    const ro    = document.getElementById(`ro-${t}`);
+    const extra = document.getElementById(`extra-${t}`);
+    const radio = ro?.querySelector('input[type=radio]');
+    if (t === type) {
+      ro?.classList.add('selected');
+      if (radio) radio.checked = true;
+      if (extra) extra.style.display = 'flex';
+    } else {
+      ro?.classList.remove('selected');
+      if (extra) extra.style.display = 'none';
+    }
+  });
+}
+
+function selectAction(action) {
+  currentAction = action;
+  ['on','off'].forEach(a => {
+    const el = document.getElementById(`ra-${a}`);
+    const radio = el?.querySelector('input[type=radio]');
+    if (a === action) {
+      el?.classList.add('selected');
+      if (radio) radio.checked = true;
+    } else {
+      el?.classList.remove('selected');
+    }
+  });
+}
+
+function populateModalLights(selectedIds = []) {
+  const picker = document.getElementById('modal-lights-picker');
+  const ids = Object.keys(state.lights);
+  if (ids.length === 0) {
+    picker.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">No lights loaded.</div>';
+    return;
+  }
+  picker.innerHTML = ids.map(id => {
+    const light = state.lights[id];
+    const checked = selectedIds.includes(id) ? 'checked' : '';
+    return `
+    <label class="checkbox-option ${checked ? 'selected' : ''}" id="pick-${id}"
+      onclick="togglePickerLight('${id}')">
+      <input type="checkbox" ${checked} onclick="event.stopPropagation()" />
+      <div class="checkbox-label">
+        ${escHtml(light.name)}
+        <small>${escHtml(light.type)}</small>
+      </div>
+    </label>`;
+  }).join('');
+}
+
+function restoreModalLightSelection(ids) {
+  // called after populateModalLights when editing
+  const picker = document.getElementById('modal-lights-picker');
+  picker.querySelectorAll('.checkbox-option').forEach(el => {
+    el.classList.remove('selected');
+    el.querySelector('input').checked = false;
+  });
+  ids.forEach(id => {
+    const el = document.getElementById(`pick-${id}`);
+    if (el) {
+      el.classList.add('selected');
+      el.querySelector('input').checked = true;
+    }
+  });
+}
+
+function togglePickerLight(id) {
+  const el    = document.getElementById(`pick-${id}`);
+  const input = el?.querySelector('input');
+  if (!el || !input) return;
+  input.checked = !input.checked;
+  el.classList.toggle('selected', input.checked);
+}
+
+async function saveAutomation() {
+  const name = document.getElementById('auto-name').value.trim();
+  if (!name) { alert('Please enter a name for this automation.'); return; }
+
+  const selectedLights = [...document.getElementById('modal-lights-picker')
+    .querySelectorAll('input:checked')]
+    .map(inp => inp.closest('.checkbox-option').id.replace('pick-', ''));
+
+  if (selectedLights.length === 0) { alert('Please select at least one light.'); return; }
+
+  // Build trigger
+  let trigger;
+  if (currentTrigger === 'time') {
+    const time = document.getElementById('auto-time').value;
+    trigger = { type: 'time', time };
+  } else {
+    const offsetEl = document.getElementById(`auto-offset-${currentTrigger}`);
+    trigger = { type: currentTrigger, offset: parseInt(offsetEl.value) || 0 };
+  }
+
+  if ((currentTrigger === 'sunrise' || currentTrigger === 'sunset') && !geoLocation) {
+    alert('Please set your location first (required for sunrise/sunset automations).');
+    return;
+  }
+
+  if (editingId) {
+    const auto = automations.find(a => a.id === editingId);
+    if (auto) {
+      auto.name     = name;
+      auto.trigger  = trigger;
+      auto.action   = currentAction;
+      auto.lightIds = selectedLights;
+      if (auto.enabled) await recalculateNextRun(auto);
+    }
+  } else {
+    const auto = {
+      id:       uid(),
+      name,
+      enabled:  true,
+      trigger,
+      action:   currentAction,
+      lightIds: selectedLights,
+      nextRun:  null,
+      lastRun:  null
+    };
+    await recalculateNextRun(auto);
+    automations.push(auto);
+  }
+
+  saveAutomationsToStorage();
+  closeModal();
+  renderAutomations();
+}
+
+function editAutomation(id) {
+  openModal(id);
+}
+
+// Close modal on backdrop click
+document.getElementById('auto-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('auto-modal')) closeModal();
+});
+</script>
+</body>
+</html>
