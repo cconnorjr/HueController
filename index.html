@@ -327,6 +327,45 @@
     }
     .badge-on { background: rgba(76,175,125,0.15); color: var(--green); border: 1px solid rgba(76,175,125,0.3); }
     .badge-off { background: rgba(224,92,92,0.12); color: #e08080; border: 1px solid rgba(224,92,92,0.3); }
+
+    /* ── Room sections ── */
+    .room-section { margin-bottom: 36px; }
+    .room-section:last-child { margin-bottom: 0; }
+    .room-header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 14px; padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .room-header h3 { font-size: 15px; font-weight: 600; flex: 1; }
+    .room-header .room-count { font-size: 12px; color: var(--text-muted); }
+    .room-header .room-btns { display: flex; gap: 6px; }
+    .unassigned-label {
+      font-size: 12px; font-weight: 700; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.5px;
+      margin-bottom: 14px; padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── Rooms management modal list ── */
+    .room-list { display: flex; flex-direction: column; gap: 8px; }
+    .room-list-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+    }
+    .room-list-item .room-item-name { flex: 1; font-size: 14px; font-weight: 500; }
+    .room-list-item .room-item-count { font-size: 12px; color: var(--text-muted); }
+
+    /* ── Picker groups ── */
+    .picker-group-label {
+      font-size: 11px; font-weight: 700; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.5px;
+      padding: 6px 2px 4px;
+    }
+    .picker-room-option { border-color: rgba(76,175,125,0.3); }
+    .picker-room-option.selected { border-color: var(--green); background: rgba(76,175,125,0.1); }
+    .picker-room-option.selected input { accent-color: var(--green); }
+    .picker-light-implied { opacity: 0.4; pointer-events: none; }
   </style>
 </head>
 <body>
@@ -340,8 +379,8 @@
 </header>
 
 <nav id="app-nav">
-  <button class="tab-btn active" id="tab-lights" onclick="switchTab('lights')">💡 Lights</button>
-  <button class="tab-btn" id="tab-automations" onclick="switchTab('automations')">⏰ Automations</button>
+  <button class="tab-btn active" id="tab-lights" onclick="switchTab('lights')">Lights</button>
+  <button class="tab-btn" id="tab-automations" onclick="switchTab('automations')">Automations</button>
 </nav>
 
 <main>
@@ -384,6 +423,7 @@
       <div class="dashboard-actions">
         <button class="btn btn-secondary btn-sm" onclick="allOff()">All Off</button>
         <button class="btn btn-primary btn-sm" onclick="allOn()">All On</button>
+        <button class="btn btn-secondary btn-sm" onclick="openRoomsModal()">Manage Rooms</button>
         <button class="btn btn-secondary btn-sm" onclick="loadLights()">↺ Refresh</button>
         <button class="disconnect-btn" onclick="disconnect()">Disconnect</button>
       </div>
@@ -419,6 +459,51 @@
   </div>
 
 </main>
+
+<!-- ── MANAGE ROOMS MODAL ── -->
+<div class="modal-backdrop" id="rooms-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Manage Rooms</h3>
+      <button class="modal-close" onclick="closeRoomsModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="rooms-list-container">
+        <div style="color:var(--text-muted);font-size:13px;">No rooms yet.</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeRoomsModal()">Close</button>
+      <button class="btn btn-primary" onclick="openRoomEditor()">+ Add Room</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── ROOM EDITOR MODAL ── -->
+<div class="modal-backdrop" id="room-editor-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="room-editor-title">New Room</h3>
+      <button class="modal-close" onclick="closeRoomEditor()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field" style="margin:0;">
+        <label>Room Name</label>
+        <input type="text" id="room-name-input" placeholder="e.g. Living Room" />
+      </div>
+      <div>
+        <div class="section-label" style="margin-bottom:10px;">Assign Lights</div>
+        <div class="lights-picker" id="room-lights-picker">
+          <div style="color:var(--text-muted);font-size:13px;">No lights loaded.</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeRoomEditor()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveRoom()">Save Room</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── AUTOMATION MODAL ── -->
 <div class="modal-backdrop" id="auto-modal">
@@ -512,12 +597,15 @@
 const CRED_KEY   = 'hue_credentials';
 const AUTO_KEY   = 'hue_automations';
 const LOC_KEY    = 'hue_location';
+const ROOMS_KEY  = 'hue_rooms';
 
 let state = { ip: null, username: null, lights: {} };
-let automations = [];
-let geoLocation = null; // { lat, lng, label }
-let sunCache    = {};   // 'YYYY-MM-DD' => { sunrise: Date, sunset: Date }
-let editingId   = null; // ID of automation being edited, or null for new
+let automations  = [];
+let rooms        = []; // [{ id, name, lightIds: [] }]
+let geoLocation  = null; // { lat, lng, label }
+let sunCache     = {};   // 'YYYY-MM-DD' => { sunrise: Date, sunset: Date }
+let editingId    = null; // automation being edited
+let editingRoomId = null; // room being edited
 let schedulerTimer = null;
 
 // ═══════════════════════════════════════════════════════
@@ -557,6 +645,12 @@ window.addEventListener('DOMContentLoaded', () => {
   const savedAuto = storageLoad(AUTO_KEY);
   if (savedAuto) {
     try { automations = JSON.parse(savedAuto); } catch {}
+  }
+
+  // Load rooms
+  const savedRooms = storageLoad(ROOMS_KEY);
+  if (savedRooms) {
+    try { rooms = JSON.parse(savedRooms); } catch {}
   }
 });
 
@@ -694,25 +788,54 @@ async function loadLights() {
     }
 
     state.lights = data;
-    renderLights(data);
+    renderLightsWithRooms();
     initScheduler();
   } catch (e) {
     container.innerHTML = `<div class="empty-state">Failed to load lights: ${e.message}</div>`;
   }
 }
 
-function renderLights(lights) {
+function renderLightsWithRooms() {
   const container = document.getElementById('lights-container');
-  const ids = Object.keys(lights);
+  const allIds = Object.keys(state.lights);
 
-  if (ids.length === 0) {
-    container.innerHTML = `<div class="empty-state">💡<p>No lights found on this bridge.</p></div>`;
+  if (allIds.length === 0) {
+    container.innerHTML = `<div class="empty-state">No lights found on this bridge.</div>`;
     return;
   }
 
-  container.innerHTML = `<div class="lights-grid">${ids.map(id => lightCardHTML(id, lights[id])).join('')}</div>`;
+  const assignedIds = new Set(rooms.flatMap(r => r.lightIds));
+  const unassigned  = allIds.filter(id => !assignedIds.has(id));
+  let html = '';
 
-  ids.forEach(id => {
+  // Render each room
+  rooms.forEach(room => {
+    const validIds = room.lightIds.filter(id => state.lights[id]);
+    if (validIds.length === 0) return;
+    html += `
+    <div class="room-section">
+      <div class="room-header">
+        <h3>${escHtml(room.name)}</h3>
+        <span class="room-count">${validIds.length} light${validIds.length !== 1 ? 's' : ''}</span>
+        <div class="room-btns">
+          <button class="btn btn-secondary btn-sm" onclick="roomSetAll('${room.id}', false)">Off</button>
+          <button class="btn btn-primary btn-sm" onclick="roomSetAll('${room.id}', true)">On</button>
+        </div>
+      </div>
+      <div class="lights-grid">${validIds.map(id => lightCardHTML(id, state.lights[id])).join('')}</div>
+    </div>`;
+  });
+
+  // Render unassigned lights
+  if (unassigned.length > 0) {
+    const label = rooms.length > 0 ? `<div class="unassigned-label">Unassigned</div>` : '';
+    html += `<div class="room-section">${label}<div class="lights-grid">${unassigned.map(id => lightCardHTML(id, state.lights[id])).join('')}</div></div>`;
+  }
+
+  container.innerHTML = html;
+
+  // Bind brightness sliders
+  allIds.forEach(id => {
     const slider = document.getElementById(`bri-${id}`);
     if (!slider) return;
     slider.addEventListener('input', e => {
@@ -722,6 +845,17 @@ function renderLights(lights) {
     });
     slider.addEventListener('change', e => setBrightness(id, parseInt(e.target.value)));
   });
+}
+
+async function roomSetAll(roomId, on) {
+  const room = rooms.find(r => r.id === roomId);
+  if (!room) return;
+  const validIds = room.lightIds.filter(id => state.lights[id] && state.lights[id].state.reachable !== false);
+  await Promise.all(validIds.map(id => {
+    state.lights[id].state.on = on;
+    updateCardState(id, state.lights[id]);
+    return setLightState(id, { on });
+  }));
 }
 
 function lightCardHTML(id, light) {
@@ -831,6 +965,124 @@ function disconnect() {
   document.getElementById('app-nav').classList.remove('visible');
   showScreen('setup');
 }
+
+// ═══════════════════════════════════════════════════════
+// ROOMS
+// ═══════════════════════════════════════════════════════
+function saveRoomsToStorage() { storageSave(ROOMS_KEY, JSON.stringify(rooms)); }
+
+function openRoomsModal() {
+  renderRoomsList();
+  document.getElementById('rooms-modal').classList.add('open');
+}
+
+function closeRoomsModal() {
+  document.getElementById('rooms-modal').classList.remove('open');
+}
+
+function renderRoomsList() {
+  const container = document.getElementById('rooms-list-container');
+  if (rooms.length === 0) {
+    container.innerHTML = `<div style="color:var(--text-muted);font-size:13px;padding:8px 0;">No rooms yet. Click + Add Room to create one.</div>`;
+    return;
+  }
+  container.innerHTML = `<div class="room-list">${rooms.map(room => {
+    const count = room.lightIds.filter(id => state.lights[id]).length;
+    return `
+    <div class="room-list-item">
+      <span class="room-item-name">${escHtml(room.name)}</span>
+      <span class="room-item-count">${count} light${count !== 1 ? 's' : ''}</span>
+      <button class="btn btn-secondary btn-sm" onclick="openRoomEditor('${room.id}')">Edit</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteRoom('${room.id}')">Delete</button>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function openRoomEditor(roomId = null) {
+  editingRoomId = roomId;
+  closeRoomsModal();
+
+  const room = roomId ? rooms.find(r => r.id === roomId) : null;
+  document.getElementById('room-editor-title').textContent = room ? 'Edit Room' : 'New Room';
+  document.getElementById('room-name-input').value = room ? room.name : '';
+
+  // Populate light picker
+  const picker = document.getElementById('room-lights-picker');
+  const allIds = Object.keys(state.lights);
+  if (allIds.length === 0) {
+    picker.innerHTML = `<div style="color:var(--text-muted);font-size:13px;">No lights loaded.</div>`;
+  } else {
+    const selectedIds = room ? room.lightIds : [];
+    picker.innerHTML = allIds.map(id => {
+      const light = state.lights[id];
+      const checked = selectedIds.includes(id);
+      return `
+      <label class="checkbox-option ${checked ? 'selected' : ''}" id="rpick-${id}"
+        onclick="toggleRoomPickerLight('${id}')">
+        <input type="checkbox" ${checked ? 'checked' : ''} onclick="event.stopPropagation()" />
+        <div class="checkbox-label">
+          ${escHtml(light.name)}
+          <small>${escHtml(light.type)}</small>
+        </div>
+      </label>`;
+    }).join('');
+  }
+
+  document.getElementById('room-editor-modal').classList.add('open');
+}
+
+function closeRoomEditor() {
+  document.getElementById('room-editor-modal').classList.remove('open');
+  editingRoomId = null;
+  // Reopen manage rooms modal
+  openRoomsModal();
+}
+
+function toggleRoomPickerLight(id) {
+  const el = document.getElementById(`rpick-${id}`);
+  const input = el?.querySelector('input');
+  if (!el || !input) return;
+  input.checked = !input.checked;
+  el.classList.toggle('selected', input.checked);
+}
+
+function saveRoom() {
+  const name = document.getElementById('room-name-input').value.trim();
+  if (!name) { alert('Please enter a room name.'); return; }
+
+  const selectedIds = [...document.getElementById('room-lights-picker')
+    .querySelectorAll('input:checked')]
+    .map(inp => inp.closest('.checkbox-option').id.replace('rpick-', ''));
+
+  if (editingRoomId) {
+    const room = rooms.find(r => r.id === editingRoomId);
+    if (room) { room.name = name; room.lightIds = selectedIds; }
+  } else {
+    rooms.push({ id: uid(), name, lightIds: selectedIds });
+  }
+
+  saveRoomsToStorage();
+  document.getElementById('room-editor-modal').classList.remove('open');
+  editingRoomId = null;
+  renderLightsWithRooms();
+  openRoomsModal();
+}
+
+function deleteRoom(roomId) {
+  if (!confirm('Delete this room? Lights will not be affected.')) return;
+  rooms = rooms.filter(r => r.id !== roomId);
+  saveRoomsToStorage();
+  renderLightsWithRooms();
+  renderRoomsList();
+}
+
+// Close room modals on backdrop click
+document.getElementById('rooms-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('rooms-modal')) closeRoomsModal();
+});
+document.getElementById('room-editor-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('room-editor-modal')) closeRoomEditor();
+});
 
 // ═══════════════════════════════════════════════════════
 // LOCATION
@@ -994,14 +1246,17 @@ async function schedulerTick() {
 
 async function fireAutomation(auto) {
   const on = auto.action === 'on';
-  const validIds = auto.lightIds.filter(id => state.lights[id]);
+  // Expand room IDs to light IDs
+  const roomLightIds = (auto.roomIds || []).flatMap(rid => {
+    const room = rooms.find(r => r.id === rid);
+    return room ? room.lightIds : [];
+  });
+  const allIds = [...new Set([...(auto.lightIds || []), ...roomLightIds])];
+  const validIds = allIds.filter(id => state.lights[id]);
   await Promise.all(validIds.map(id => setLightState(id, { on })));
-  // Update light state in memory
   validIds.forEach(id => {
-    if (state.lights[id]) {
-      state.lights[id].state.on = on;
-      updateCardState(id, state.lights[id]);
-    }
+    state.lights[id].state.on = on;
+    updateCardState(id, state.lights[id]);
   });
   console.log(`[Automation] "${auto.name}" fired: lights ${validIds.join(',')} → ${on ? 'on' : 'off'}`);
 }
@@ -1026,9 +1281,11 @@ function autoCardHTML(auto) {
     ? `<span class="badge badge-on">Turn On</span>`
     : `<span class="badge badge-off">Turn Off</span>`;
 
-  const lightNames = auto.lightIds
-    .map(id => state.lights[id]?.name || `Light ${id}`)
-    .join(', ') || 'No lights';
+  const roomNames = (auto.roomIds || [])
+    .map(rid => rooms.find(r => r.id === rid)?.name).filter(Boolean);
+  const individualNames = (auto.lightIds || [])
+    .map(id => state.lights[id]?.name).filter(Boolean);
+  const lightNames = [...roomNames, ...individualNames].join(', ') || 'No lights';
 
   const nextRunStr = formatNextRun(auto);
   const enabledClass = auto.enabled ? 'auto-enabled' : '';
@@ -1132,21 +1389,17 @@ function openModal(id = null) {
   document.getElementById('auto-offset-sunrise').value = '0';
   document.getElementById('auto-offset-sunset').value  = '0';
 
-  if (id) {
-    const auto = automations.find(a => a.id === id);
-    if (auto) {
-      document.getElementById('auto-name').value = auto.name;
-      selectTrigger(auto.trigger.type);
-      selectAction(auto.action);
-      if (auto.trigger.type === 'time')    document.getElementById('auto-time').value = auto.trigger.time;
-      if (auto.trigger.type === 'sunrise') document.getElementById('auto-offset-sunrise').value = auto.trigger.offset || 0;
-      if (auto.trigger.type === 'sunset')  document.getElementById('auto-offset-sunset').value  = auto.trigger.offset || 0;
-      // Light selections restored after picker renders
-      setTimeout(() => restoreModalLightSelection(auto.lightIds), 0);
-    }
+  const auto = id ? automations.find(a => a.id === id) : null;
+  if (auto) {
+    document.getElementById('auto-name').value = auto.name;
+    selectTrigger(auto.trigger.type);
+    selectAction(auto.action);
+    if (auto.trigger.type === 'time')    document.getElementById('auto-time').value = auto.trigger.time;
+    if (auto.trigger.type === 'sunrise') document.getElementById('auto-offset-sunrise').value = auto.trigger.offset || 0;
+    if (auto.trigger.type === 'sunset')  document.getElementById('auto-offset-sunset').value  = auto.trigger.offset || 0;
   }
 
-  populateModalLights(id ? automations.find(a => a.id === id)?.lightIds : []);
+  populateModalLights(auto?.lightIds || [], auto?.roomIds || []);
   document.getElementById('auto-modal').classList.add('open');
 }
 
@@ -1186,48 +1439,95 @@ function selectAction(action) {
   });
 }
 
-function populateModalLights(selectedIds = []) {
+function populateModalLights(selectedLightIds = [], selectedRoomIds = []) {
   const picker = document.getElementById('modal-lights-picker');
-  const ids = Object.keys(state.lights);
-  if (ids.length === 0) {
+  const allIds = Object.keys(state.lights);
+  if (allIds.length === 0) {
     picker.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">No lights loaded.</div>';
     return;
   }
-  picker.innerHTML = ids.map(id => {
+
+  let html = '';
+
+  // Rooms section
+  if (rooms.length > 0) {
+    html += `<div class="picker-group-label">Rooms</div>`;
+    html += rooms.map(room => {
+      const count = room.lightIds.filter(id => state.lights[id]).length;
+      const checked = selectedRoomIds.includes(room.id);
+      return `
+      <label class="checkbox-option picker-room-option ${checked ? 'selected' : ''}" id="rpick-auto-${room.id}"
+        onclick="togglePickerRoom('${room.id}')">
+        <input type="checkbox" ${checked ? 'checked' : ''} onclick="event.stopPropagation()" />
+        <div class="checkbox-label">
+          ${escHtml(room.name)}
+          <small>${count} light${count !== 1 ? 's' : ''}</small>
+        </div>
+      </label>`;
+    }).join('');
+    html += `<div class="picker-group-label" style="margin-top:8px;">Individual Lights</div>`;
+  }
+
+  // Individual lights — dim lights that are already covered by a selected room
+  const roomCoveredIds = new Set(selectedRoomIds.flatMap(rid => rooms.find(r => r.id === rid)?.lightIds || []));
+  html += allIds.map(id => {
     const light = state.lights[id];
-    const checked = selectedIds.includes(id) ? 'checked' : '';
+    const checked = selectedLightIds.includes(id);
+    const implied = roomCoveredIds.has(id);
     return `
-    <label class="checkbox-option ${checked ? 'selected' : ''}" id="pick-${id}"
+    <label class="checkbox-option ${checked ? 'selected' : ''} ${implied ? 'picker-light-implied' : ''}" id="pick-${id}"
       onclick="togglePickerLight('${id}')">
-      <input type="checkbox" ${checked} onclick="event.stopPropagation()" />
+      <input type="checkbox" ${checked || implied ? 'checked' : ''} onclick="event.stopPropagation()" />
       <div class="checkbox-label">
         ${escHtml(light.name)}
         <small>${escHtml(light.type)}</small>
       </div>
     </label>`;
   }).join('');
+
+  picker.innerHTML = html;
 }
 
-function restoreModalLightSelection(ids) {
-  // called after populateModalLights when editing
-  const picker = document.getElementById('modal-lights-picker');
-  picker.querySelectorAll('.checkbox-option').forEach(el => {
-    el.classList.remove('selected');
-    el.querySelector('input').checked = false;
-  });
-  ids.forEach(id => {
-    const el = document.getElementById(`pick-${id}`);
-    if (el) {
-      el.classList.add('selected');
-      el.querySelector('input').checked = true;
+function togglePickerRoom(roomId) {
+  const el    = document.getElementById(`rpick-auto-${roomId}`);
+  const input = el?.querySelector('input');
+  if (!el || !input) return;
+  input.checked = !input.checked;
+  el.classList.toggle('selected', input.checked);
+
+  // Dim/undim lights covered by this room
+  const room = rooms.find(r => r.id === roomId);
+  if (!room) return;
+
+  // Collect all currently-selected room IDs
+  const selectedRoomIds = getSelectedRoomIds();
+  const coveredIds = new Set(selectedRoomIds.flatMap(rid => rooms.find(r => r.id === rid)?.lightIds || []));
+
+  room.lightIds.forEach(id => {
+    const lightEl = document.getElementById(`pick-${id}`);
+    if (!lightEl) return;
+    const lightInput = lightEl.querySelector('input');
+    const wasSelected = lightEl.classList.contains('selected');
+    if (coveredIds.has(id)) {
+      lightEl.classList.add('picker-light-implied');
+      lightInput.checked = true;
+    } else {
+      lightEl.classList.remove('picker-light-implied');
+      lightInput.checked = wasSelected;
     }
   });
+}
+
+function getSelectedRoomIds() {
+  return rooms
+    .filter(r => document.getElementById(`rpick-auto-${r.id}`)?.querySelector('input')?.checked)
+    .map(r => r.id);
 }
 
 function togglePickerLight(id) {
   const el    = document.getElementById(`pick-${id}`);
   const input = el?.querySelector('input');
-  if (!el || !input) return;
+  if (!el || !input || el.classList.contains('picker-light-implied')) return;
   input.checked = !input.checked;
   el.classList.toggle('selected', input.checked);
 }
@@ -1236,11 +1536,22 @@ async function saveAutomation() {
   const name = document.getElementById('auto-name').value.trim();
   if (!name) { alert('Please enter a name for this automation.'); return; }
 
+  const selectedRoomIds = getSelectedRoomIds();
   const selectedLights = [...document.getElementById('modal-lights-picker')
     .querySelectorAll('input:checked')]
-    .map(inp => inp.closest('.checkbox-option').id.replace('pick-', ''));
+    .map(inp => inp.closest('.checkbox-option')?.id)
+    .filter(id => id?.startsWith('pick-'))
+    .map(id => id.replace('pick-', ''))
+    .filter(id => {
+      // exclude lights that are only checked because of room coverage
+      const el = document.getElementById(`pick-${id}`);
+      return el && !el.classList.contains('picker-light-implied');
+    });
 
-  if (selectedLights.length === 0) { alert('Please select at least one light.'); return; }
+  if (selectedRoomIds.length === 0 && selectedLights.length === 0) {
+    alert('Please select at least one room or light.');
+    return;
+  }
 
   // Build trigger
   let trigger;
@@ -1264,6 +1575,7 @@ async function saveAutomation() {
       auto.trigger  = trigger;
       auto.action   = currentAction;
       auto.lightIds = selectedLights;
+      auto.roomIds  = selectedRoomIds;
       if (auto.enabled) await recalculateNextRun(auto);
     }
   } else {
@@ -1274,6 +1586,7 @@ async function saveAutomation() {
       trigger,
       action:   currentAction,
       lightIds: selectedLights,
+      roomIds:  selectedRoomIds,
       nextRun:  null,
       lastRun:  null
     };
