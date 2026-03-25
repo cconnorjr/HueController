@@ -366,6 +366,11 @@
     .picker-room-option.selected { border-color: var(--green); background: rgba(76,175,125,0.1); }
     .picker-room-option.selected input { accent-color: var(--green); }
     .picker-light-implied { opacity: 0.4; pointer-events: none; }
+    .picker-light-locked {
+      opacity: 0.4; pointer-events: none;
+      border-style: dashed;
+    }
+    .picker-light-locked .checkbox-label small { color: var(--text-muted); }
   </style>
 </head>
 <body>
@@ -1013,9 +1018,27 @@ function openRoomEditor(roomId = null) {
     picker.innerHTML = `<div style="color:var(--text-muted);font-size:13px;">No lights loaded.</div>`;
   } else {
     const selectedIds = room ? room.lightIds : [];
+    // Build a map of lightId → room name for lights assigned to OTHER rooms
+    const assignedElsewhere = {};
+    rooms.forEach(r => {
+      if (r.id === roomId) return; // skip the room being edited
+      r.lightIds.forEach(lid => { assignedElsewhere[lid] = r.name; });
+    });
+
     picker.innerHTML = allIds.map(id => {
       const light = state.lights[id];
       const checked = selectedIds.includes(id);
+      const otherRoom = assignedElsewhere[id];
+      if (otherRoom) {
+        return `
+        <label class="checkbox-option picker-light-locked" id="rpick-${id}">
+          <input type="checkbox" disabled />
+          <div class="checkbox-label">
+            ${escHtml(light.name)}
+            <small>Assigned to: ${escHtml(otherRoom)}</small>
+          </div>
+        </label>`;
+      }
       return `
       <label class="checkbox-option ${checked ? 'selected' : ''}" id="rpick-${id}"
         onclick="toggleRoomPickerLight('${id}')">
